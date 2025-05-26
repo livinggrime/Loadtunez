@@ -224,6 +224,32 @@ def main() -> None:
     
     # Register message handler for URLs
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_url))
+    
+    # Create download directory if it doesn't exist
+    os.makedirs(os.path.dirname(os.path.abspath(__file__)) + '/downloads/', exist_ok=True)
+    
+    # Start the Bot
+    # For local development:
+    # updater.start_polling()
+    
+    # For production deployment on Render:
+    PORT = int(os.environ.get('PORT', 8080))
+    WEBHOOK_URL = os.environ.get('WEBHOOK_URL')
+    
+    # If webhook URL is provided, use webhooks, otherwise use polling
+    if WEBHOOK_URL:
+        updater.start_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=API_TOKEN,
+            webhook_url=f"{WEBHOOK_URL}/{API_TOKEN}"
+        )
+    else:
+        # Fallback to polling if no webhook URL is provided
+        updater.start_polling()
+    
+    # Run the bot until you press Ctrl-C
+    updater.idle()mand, handle_url))
 
     # Start the Bot
     updater.start_polling()
