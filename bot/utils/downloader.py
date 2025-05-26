@@ -30,28 +30,49 @@ def download_file(url, destination, max_retries=MAX_RETRIES):
     return False
 
 def download_spotify_track(track_id, output_path):
-    """
-    Download a Spotify track.
-    
-    In a real implementation, this would use a library like spotdl or a similar tool
-    that can download Spotify tracks. For demonstration purposes, this is a placeholder.
-    """
+    """Download a Spotify track using spotdl."""
     try:
-        # In a real implementation, you would use a library like spotdl
-        # Example command: spotdl --output {output_path} https://open.spotify.com/track/{track_id}
+        # Create the directory if it doesn't exist
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
-        # For demonstration purposes, we'll simulate a successful download
+        # Construct the Spotify URL
+        spotify_url = f"https://open.spotify.com/track/{track_id}"
+        
+        # Use spotdl to download the track
+        output_dir = os.path.dirname(output_path)
+        filename = os.path.basename(output_path)
+        
         print(f"Downloading Spotify track {track_id} to {output_path}")
         
-        # Create an empty file for demonstration
-        with open(output_path, 'w') as f:
-            f.write("This is a placeholder for a Spotify track download")
+        subprocess.run([
+            'spotdl', 
+            'download', 
+            spotify_url, 
+            '--output', 
+            f'{output_dir}/{filename}'
+        ], check=True)
         
-        # Return metadata about the track
-        return {
-            "success": True,
-            "path": output_path
-        }
+        # Check if file was downloaded
+        if os.path.exists(output_path):
+            return {
+                "success": True,
+                "path": output_path
+            }
+        else:
+            # spotdl might have saved with a different filename, try to find it
+            files = os.listdir(output_dir)
+            if files:
+                # Get the most recently created file
+                newest_file = max(files, key=lambda f: os.path.getctime(os.path.join(output_dir, f)))
+                newest_path = os.path.join(output_dir, newest_file)
+                return {
+                    "success": True,
+                    "path": newest_path
+                }
+            return {
+                "success": False,
+                "error": "File not found after download attempt"
+            }
     except Exception as e:
         print(f"Error downloading Spotify track: {str(e)}")
         return {
@@ -60,28 +81,40 @@ def download_spotify_track(track_id, output_path):
         }
 
 def download_tiktok_video(video_url, output_path):
-    """
-    Download a TikTok video.
-    
-    In a real implementation, this would use a library or API that can
-    download TikTok videos without watermarks.
-    """
+    """Download a TikTok video using youtube-dl."""
     try:
-        # In a real implementation, you would use a TikTok downloader library or API
-        # Example using youtube-dl (which can download from TikTok):
-        # subprocess.run(['youtube-dl', '-o', output_path, video_url], check=True)
+        # Create the directory if it doesn't exist
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
-        # For demonstration purposes, we'll simulate a successful download
         print(f"Downloading TikTok video from {video_url} to {output_path}")
         
-        # Create an empty file for demonstration
-        with open(output_path, 'w') as f:
-            f.write("This is a placeholder for a TikTok video download")
+        # Use youtube-dl to download TikTok videos
+        subprocess.run([
+            'youtube-dl',
+            '-o', output_path,
+            '--no-warnings',
+            video_url
+        ], check=True)
         
-        return {
-            "success": True,
-            "path": output_path
-        }
+        # Check if file was downloaded
+        if os.path.exists(output_path):
+            return {
+                "success": True,
+                "path": output_path
+            }
+        else:
+            # youtube-dl might have added an extension
+            base_path = os.path.splitext(output_path)[0]
+            for ext in ['.mp4', '.webm', '.mkv']:
+                if os.path.exists(base_path + ext):
+                    return {
+                        "success": True,
+                        "path": base_path + ext
+                    }
+            return {
+                "success": False,
+                "error": "File not found after download attempt"
+            }
     except Exception as e:
         print(f"Error downloading TikTok video: {str(e)}")
         return {
@@ -90,57 +123,58 @@ def download_tiktok_video(video_url, output_path):
         }
 
 def download_youtube_video(video_url, output_path):
-    """
-    Download a YouTube video using youtube-dl.
-    
-    In a real implementation, this would use youtube-dl or a similar library
-    to download YouTube videos.
-    """
+    """Download a YouTube video using youtube-dl."""
     try:
-        # In a real implementation, you would use youtube-dl or yt-dlp
-        # Example command:
-        # subprocess.run([
-        #     'youtube-dl',
-        #     '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        #     '-o', output_path,
-        #     video_url
-        # ], check=True)
+        # Create the directory if it doesn't exist
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
-        # Get video info
-        # In a real implementation, you would use youtube-dl to get video info
-        # Example command:
-        # result = subprocess.run([
-        #     'youtube-dl',
-        #     '--dump-json',
-        #     video_url
-        # ], capture_output=True, text=True, check=True)
-        # video_info = json.loads(result.stdout)
-        
-        # For demonstration purposes, we'll simulate a successful download
         print(f"Downloading YouTube video from {video_url} to {output_path}")
         
-        # Extract video ID from URL
-        video_id = None
-        match = re.search(r'youtube\.com/watch\?v=([a-zA-Z0-9_-]+)', video_url)
-        if match:
-            video_id = match.group(1)
+        # Get video info first
+        result = subprocess.run([
+            'youtube-dl',
+            '--dump-json',
+            video_url
+        ], capture_output=True, text=True, check=True)
+        
+        video_info = json.loads(result.stdout)
+        title = video_info.get('title', 'Unknown Title')
+        uploader = video_info.get('uploader', 'Unknown Uploader')
+        duration = video_info.get('duration', 0)
+        
+        # Download the video
+        subprocess.run([
+            'youtube-dl',
+            '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            '-o', output_path,
+            video_url
+        ], check=True)
+        
+        # Check if file was downloaded
+        if os.path.exists(output_path):
+            return {
+                "title": title,
+                "uploader": uploader,
+                "duration": duration,
+                "success": True,
+                "path": output_path
+            }
         else:
-            match = re.search(r'youtu\.be/([a-zA-Z0-9_-]+)', video_url)
-            if match:
-                video_id = match.group(1)
-        
-        # Create an empty file for demonstration
-        with open(output_path, 'w') as f:
-            f.write(f"This is a placeholder for a YouTube video download (ID: {video_id})")
-        
-        # Return metadata about the video
-        return {
-            "title": f"YouTube Video {video_id}",
-            "uploader": "YouTube Channel",
-            "duration": 180,  # seconds
-            "success": True,
-            "path": output_path
-        }
+            # youtube-dl might have added an extension
+            base_path = os.path.splitext(output_path)[0]
+            for ext in ['.mp4', '.webm', '.mkv']:
+                if os.path.exists(base_path + ext):
+                    return {
+                        "title": title,
+                        "uploader": uploader,
+                        "duration": duration,
+                        "success": True,
+                        "path": base_path + ext
+                    }
+            return {
+                "success": False,
+                "error": "File not found after download attempt"
+            }
     except Exception as e:
         print(f"Error downloading YouTube video: {str(e)}")
         return {
@@ -149,30 +183,50 @@ def download_youtube_video(video_url, output_path):
         }
 
 def download_instagram_reel(reel_url, output_path):
-    """
-    Download an Instagram reel.
-    
-    In a real implementation, this would use a library like instaloader
-    to download Instagram reels.
-    """
+    """Download an Instagram reel using instaloader."""
     try:
-        # In a real implementation, you would use instaloader or a similar library
-        # Example using instaloader:
-        # from instaloader import Instaloader, Post
-        # loader = Instaloader()
-        # loader.download_post(Post.from_shortcode(loader.context, shortcode), target=os.path.dirname(output_path))
+        # Create the directory if it doesn't exist
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
-        # For demonstration purposes, we'll simulate a successful download
         print(f"Downloading Instagram reel from {reel_url} to {output_path}")
         
-        # Create an empty file for demonstration
-        with open(output_path, 'w') as f:
-            f.write("This is a placeholder for an Instagram reel download")
+        # Extract the shortcode from the URL
+        match = re.search(r'instagram\.com/(reel|p)/([^/?]+)', reel_url)
+        if not match:
+            return {
+                "success": False,
+                "error": "Invalid Instagram URL"
+            }
         
-        return {
-            "success": True,
-            "path": output_path
-        }
+        shortcode = match.group(2)
+        
+        # Use youtube-dl for Instagram as well (it works for reels and posts)
+        subprocess.run([
+            'youtube-dl',
+            '-o', output_path,
+            '--no-warnings',
+            reel_url
+        ], check=True)
+        
+        # Check if file was downloaded
+        if os.path.exists(output_path):
+            return {
+                "success": True,
+                "path": output_path
+            }
+        else:
+            # youtube-dl might have added an extension
+            base_path = os.path.splitext(output_path)[0]
+            for ext in ['.mp4', '.jpg', '.png']:
+                if os.path.exists(base_path + ext):
+                    return {
+                        "success": True,
+                        "path": base_path + ext
+                    }
+            return {
+                "success": False,
+                "error": "File not found after download attempt"
+            }
     except Exception as e:
         print(f"Error downloading Instagram reel: {str(e)}")
         return {
