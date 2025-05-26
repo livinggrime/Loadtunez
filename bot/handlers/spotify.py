@@ -1,11 +1,11 @@
 import re
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from bot.utils.downloader import download_spotify_track, ensure_directory_exists
 from bot.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, DOWNLOAD_DIRECTORY
-import os
 
 # Initialize Spotify client
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
@@ -46,15 +46,12 @@ def handle_spotify_url(update: Update, context: CallbackContext) -> None:
         update.message.reply_text("Invalid Spotify URL. Please provide a valid Spotify track, album, or playlist link.")
         return
     
-    # Ensure download directory exists
-    ensure_directory_exists(DOWNLOAD_DIRECTORY)
-    
     if content_type == 'track':
         download_single_track(update, spotify_id)
     elif content_type == 'album':
-        download_album(update, spotify_id)
+        update.message.reply_text("Album downloads are not supported. Please send individual track links.")
     elif content_type == 'playlist':
-        download_playlist(update, spotify_id)
+        update.message.reply_text("Playlist downloads are not supported. Please send individual track links.")
 
 def search_spotify(update: Update, context: CallbackContext, query: str) -> None:
     """Search for tracks and albums on Spotify."""
@@ -65,11 +62,7 @@ def search_spotify(update: Update, context: CallbackContext, query: str) -> None
         track_results = sp.search(q=query, type='track', limit=5)
         tracks = track_results['tracks']['items']
         
-        # Search for albums
-        album_results = sp.search(q=query, type='album', limit=5)
-        albums = album_results['albums']['items']
-        
-        if not tracks and not albums:
+        if not tracks:
             update.message.reply_text(f"❌ No results found for: *{query}*", parse_mode='Markdown')
             return
         
@@ -91,25 +84,6 @@ def search_spotify(update: Update, context: CallbackContext, query: str) -> None
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             update.message.reply_text("Select a track to download:", reply_markup=reply_markup)
-        
-        # Create keyboard for albums
-        keyboard = []
-        
-        if albums:
-            update.message.reply_text("💿 *Albums:*", parse_mode='Markdown')
-            for i, album in enumerate(albums):
-                album_name = album['name']
-                artist_name = album['artists'][0]['name']
-                album_id = album['id']
-                
-                # Create button for each album
-                keyboard.append([InlineKeyboardButton(
-                    f"{i+1}. {album_name} - {artist_name}",
-                    callback_data=f"dl_album_{album_id}"
-                )])
-            
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            update.message.reply_text("Select an album to download:", reply_markup=reply_markup)
             
     except Exception as e:
         update.message.reply_text(f"❌ Error searching Spotify: {str(e)}")
@@ -125,13 +99,9 @@ def handle_spotify_callback(update: Update, context: CallbackContext) -> None:
         track_id = data.replace('dl_track_', '')
         query.edit_message_text(f"Starting track download...")
         download_single_track(query, track_id)
-    elif data.startswith('dl_album_'):
-        album_id = data.replace('dl_album_', '')
-        query.edit_message_text(f"Starting album download...")
-        download_album(query, album_id)
 
 def download_single_track(update, track_id):
-    """Download a single Spotify track."""
+    """Download a single Spotify track directly to memory and send to user."""
     try:
         # Get track info
         track = sp.track(track_id)
@@ -141,146 +111,54 @@ def download_single_track(update, track_id):
         
         update.message.reply_text(f"🎵 Downloading track: *{track_name}* by *{artists}*", parse_mode='Markdown')
         
-        # Create a safe filename
-        safe_filename = "".join([c for c in f"{artists} - {track_name}" if c.isalpha() or c.isdigit() or c in ' -_.']).strip()
-        output_path = os.path.join(DOWNLOAD_DIRECTORY, f"{safe_filename}.mp3")
-        
-        # Download the track
-        result = download_spotify_track(track_id, output_path)
+        # Download the track to a temporary file
+        result = download_spotify_track(track_id)
         
         if not result.get("success", False):
             update.message.reply_text(f"❌ Error downloading track: {result.get('error', 'Unknown error')}")
             return
             
-        # Get the actual file path (might be different from requested path)
-        actual_path = result.get("path", output_path)
+        # Get the file path
+        temp_path = result.get("path")
         
-        if not os.path.exists(actual_path):
-            update.message.reply_text(f"❌ Downloaded file not found at {actual_path}")
+        if not os.path.exists(temp_path):
+            update.message.reply_text(f"❌ Downloaded file not found")
             return
             
         # Check file size
-        file_size = os.path.getsize(actual_path)
+        file_size = os.path.getsize(temp_path)
         if file_size == 0:
             update.message.reply_text("❌ Downloaded file is empty")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
             return
             
         # Send the downloaded file
-        update.message.reply_text(f"✅ Downloaded: *{track_name}* by *{artists}*\nFile size: {file_size/1024/1024:.2f} MB", parse_mode='Markdown')
+        update.message.reply_text(f"✅ Downloaded: *{track_name}* by *{artists}*\nSending file...", parse_mode='Markdown')
         
-        # First try sending as audio
         try:
-            with open(actual_path, 'rb') as audio_file:
-                message = update.message.reply_audio(
+            with open(temp_path, 'rb') as audio_file:
+                update.message.reply_audio(
                     audio=audio_file,
                     title=track_name,
                     performer=artists,
                     caption=f"Album: {album_name}"
                 )
-                update.message.reply_text("✅ File sent successfully! Check your downloads folder if it doesn't appear automatically.")
-                return
         except Exception as send_error:
             update.message.reply_text(f"❌ Error sending audio file: {str(send_error)}")
-        
-        # If audio fails, try sending as document
-        try:
-            with open(actual_path, 'rb') as doc_file:
-                message = update.message.reply_document(
-                    document=doc_file,
-                    caption=f"{track_name} by {artists} (Album: {album_name})"
-                )
-                update.message.reply_text("✅ File sent as document! Tap on it to download.")
-                return
-        except Exception as doc_error:
-            update.message.reply_text(f"❌ Error sending document: {str(doc_error)}")
-            
-        # Last resort - try sending a smaller portion of the file
-        if file_size > 10*1024*1024:  # If file is larger than 10MB
+            # Try sending as document if audio fails
             try:
-                update.message.reply_text("File is large, trying to send a smaller portion...")
-                with open(actual_path, 'rb') as large_file:
-                    # Read first 8MB
-                    smaller_data = large_file.read(8*1024*1024)
-                    
-                # Write to a new file
-                smaller_path = actual_path + ".smaller.mp3"
-                with open(smaller_path, 'wb') as smaller_file:
-                    smaller_file.write(smaller_data)
-                
-                # Send the smaller file
-                with open(smaller_path, 'rb') as small_file:
+                with open(temp_path, 'rb') as doc_file:
                     update.message.reply_document(
-                        document=small_file,
-                        caption=f"{track_name} by {artists} (Album: {album_name}) - PARTIAL FILE"
+                        document=doc_file,
+                        caption=f"{track_name} by {artists} (Album: {album_name})"
                     )
-                    update.message.reply_text("⚠️ Sent partial file due to size limitations.")
-            except Exception as small_error:
-                update.message.reply_text(f"❌ All sending methods failed: {str(small_error)}")
+            except Exception as doc_error:
+                update.message.reply_text(f"❌ Error sending document: {str(doc_error)}")
+        
+        # Clean up the temporary file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            
     except Exception as e:
         update.message.reply_text(f"❌ Error downloading track: {str(e)}")
-
-def download_album(update, album_id):
-    """Download all tracks from a Spotify album."""
-    try:
-        # Get album info
-        album = sp.album(album_id)
-        album_name = album['name']
-        artist_name = album['artists'][0]['name']
-        
-        update.message.reply_text(f"💿 Downloading album: *{album_name}* by *{artist_name}*\nThis may take a while...", parse_mode='Markdown')
-        
-        # Get all tracks from the album
-        results = sp.album_tracks(album_id)
-        tracks = results['items']
-        
-        # Create album directory
-        album_dir = os.path.join(DOWNLOAD_DIRECTORY, f"{artist_name} - {album_name}")
-        ensure_directory_exists(album_dir)
-        
-        # Download each track
-        for i, track in enumerate(tracks):
-            track_name = track['name']
-            track_number = track['track_number']
-            track_id = track['id']
-            
-            update.message.reply_text(f"Downloading track {i+1}/{len(tracks)}: {track_name}")
-            
-            output_path = os.path.join(album_dir, f"{track_number:02d} - {track_name}.mp3")
-            download_spotify_track(track_id, output_path)
-        
-        update.message.reply_text(f"✅ Album *{album_name}* downloaded successfully!", parse_mode='Markdown')
-    except Exception as e:
-        update.message.reply_text(f"❌ Error downloading album: {str(e)}")
-
-def download_playlist(update, playlist_id):
-    """Download all tracks from a Spotify playlist."""
-    try:
-        # Get playlist info
-        playlist = sp.playlist(playlist_id)
-        playlist_name = playlist['name']
-        
-        update.message.reply_text(f"📋 Downloading playlist: *{playlist_name}*\nThis may take a while...", parse_mode='Markdown')
-        
-        # Get all tracks from the playlist
-        results = sp.playlist_tracks(playlist_id)
-        tracks = results['items']
-        
-        # Create playlist directory
-        playlist_dir = os.path.join(DOWNLOAD_DIRECTORY, f"Playlist - {playlist_name}")
-        ensure_directory_exists(playlist_dir)
-        
-        # Download each track
-        for i, item in enumerate(tracks):
-            track = item['track']
-            track_name = track['name']
-            artists = ', '.join([artist['name'] for artist in track['artists']])
-            track_id = track['id']
-            
-            update.message.reply_text(f"Downloading track {i+1}/{len(tracks)}: {track_name} by {artists}")
-            
-            output_path = os.path.join(playlist_dir, f"{i+1:02d} - {artists} - {track_name}.mp3")
-            download_spotify_track(track_id, output_path)
-        
-        update.message.reply_text(f"✅ Playlist *{playlist_name}* downloaded successfully!", parse_mode='Markdown')
-    except Exception as e:
-        update.message.reply_text(f"❌ Error downloading playlist: {str(e)}")
