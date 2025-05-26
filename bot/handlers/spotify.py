@@ -143,17 +143,47 @@ def download_single_track(update, track_id):
         
         # Download the track
         output_path = os.path.join(DOWNLOAD_DIRECTORY, f"{artists} - {track_name}.mp3")
-        download_spotify_track(track_id, output_path)
+        result = download_spotify_track(track_id, output_path)
         
+        if not result.get("success", False):
+            update.message.reply_text(f"❌ Error downloading track: {result.get('error', 'Unknown error')}")
+            return
+            
+        # Get the actual file path (might be different from requested path)
+        actual_path = result.get("path", output_path)
+        
+        if not os.path.exists(actual_path):
+            update.message.reply_text(f"❌ Downloaded file not found at {actual_path}")
+            return
+            
+        # Check file size
+        file_size = os.path.getsize(actual_path)
+        if file_size == 0:
+            update.message.reply_text("❌ Downloaded file is empty")
+            return
+            
         # Send the downloaded file
-        update.message.reply_text(f"✅ Downloaded: *{track_name}* by *{artists}*", parse_mode='Markdown')
-        with open(output_path, 'rb') as audio_file:
-            update.message.reply_audio(
-                audio=audio_file,
-                title=track_name,
-                performer=artists,
-                caption=f"Album: {album_name}"
-            )
+        update.message.reply_text(f"✅ Downloaded: *{track_name}* by *{artists}*\nFile size: {file_size/1024/1024:.2f} MB", parse_mode='Markdown')
+        
+        try:
+            with open(actual_path, 'rb') as audio_file:
+                update.message.reply_audio(
+                    audio=audio_file,
+                    title=track_name,
+                    performer=artists,
+                    caption=f"Album: {album_name}"
+                )
+        except Exception as send_error:
+            update.message.reply_text(f"❌ Error sending audio file: {str(send_error)}")
+            # Try sending as document if audio fails
+            try:
+                with open(actual_path, 'rb') as doc_file:
+                    update.message.reply_document(
+                        document=doc_file,
+                        caption=f"{track_name} by {artists} (Album: {album_name})"
+                    )
+            except Exception as doc_error:
+                update.message.reply_text(f"❌ Error sending document: {str(doc_error)}")
     except Exception as e:
         update.message.reply_text(f"❌ Error downloading track: {str(e)}")
 
