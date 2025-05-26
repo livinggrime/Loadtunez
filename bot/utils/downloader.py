@@ -30,26 +30,37 @@ def download_file(url, destination, max_retries=MAX_RETRIES):
     return False
 
 def download_spotify_track(track_id, output_path):
-    """Download a Spotify track using spotdl."""
+    """Download a Spotify track using yt-dlp after searching for it."""
     try:
+        # Get track info from Spotify API
+        from spotipy import Spotify
+        from spotipy.oauth2 import SpotifyClientCredentials
+        from bot.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
+        
+        sp = Spotify(auth_manager=SpotifyClientCredentials(
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET
+        ))
+        
+        track = sp.track(track_id)
+        track_name = track['name']
+        artists = ', '.join([artist['name'] for artist in track['artists']])
+        search_query = f"{artists} - {track_name} audio"
+        
         # Create the directory if it doesn't exist
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
-        # Construct the Spotify URL
-        spotify_url = f"https://open.spotify.com/track/{track_id}"
+        print(f"Searching YouTube for: {search_query}")
         
-        # Use spotdl to download the track
-        output_dir = os.path.dirname(output_path)
-        filename = os.path.basename(output_path)
-        
-        print(f"Downloading Spotify track {track_id} to {output_path}")
-        
+        # Use yt-dlp to search YouTube and download the first result
         subprocess.run([
-            'spotdl', 
-            'download', 
-            spotify_url, 
-            '--output', 
-            f'{output_dir}/{filename}'
+            'yt-dlp',
+            'ytsearch1:' + search_query,
+            '-x',  # Extract audio
+            '--audio-format', 'mp3',
+            '--audio-quality', '0',  # Best quality
+            '-o', output_path,
+            '--no-warnings'
         ], check=True)
         
         # Check if file was downloaded
@@ -59,15 +70,12 @@ def download_spotify_track(track_id, output_path):
                 "path": output_path
             }
         else:
-            # spotdl might have saved with a different filename, try to find it
-            files = os.listdir(output_dir)
-            if files:
-                # Get the most recently created file
-                newest_file = max(files, key=lambda f: os.path.getctime(os.path.join(output_dir, f)))
-                newest_path = os.path.join(output_dir, newest_file)
+            # yt-dlp might have saved with a different filename
+            base_path = os.path.splitext(output_path)[0]
+            if os.path.exists(base_path + '.mp3'):
                 return {
                     "success": True,
-                    "path": newest_path
+                    "path": base_path + '.mp3'
                 }
             return {
                 "success": False,
@@ -81,16 +89,16 @@ def download_spotify_track(track_id, output_path):
         }
 
 def download_tiktok_video(video_url, output_path):
-    """Download a TikTok video using youtube-dl."""
+    """Download a TikTok video using yt-dlp."""
     try:
         # Create the directory if it doesn't exist
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         print(f"Downloading TikTok video from {video_url} to {output_path}")
         
-        # Use youtube-dl to download TikTok videos
+        # Use yt-dlp to download TikTok videos
         subprocess.run([
-            'youtube-dl',
+            'yt-dlp',
             '-o', output_path,
             '--no-warnings',
             video_url
@@ -103,7 +111,7 @@ def download_tiktok_video(video_url, output_path):
                 "path": output_path
             }
         else:
-            # youtube-dl might have added an extension
+            # yt-dlp might have added an extension
             base_path = os.path.splitext(output_path)[0]
             for ext in ['.mp4', '.webm', '.mkv']:
                 if os.path.exists(base_path + ext):
@@ -123,7 +131,7 @@ def download_tiktok_video(video_url, output_path):
         }
 
 def download_youtube_video(video_url, output_path):
-    """Download a YouTube video using youtube-dl."""
+    """Download a YouTube video using yt-dlp."""
     try:
         # Create the directory if it doesn't exist
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -132,7 +140,7 @@ def download_youtube_video(video_url, output_path):
         
         # Get video info first
         result = subprocess.run([
-            'youtube-dl',
+            'yt-dlp',
             '--dump-json',
             video_url
         ], capture_output=True, text=True, check=True)
@@ -144,7 +152,7 @@ def download_youtube_video(video_url, output_path):
         
         # Download the video
         subprocess.run([
-            'youtube-dl',
+            'yt-dlp',
             '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             '-o', output_path,
             video_url
@@ -160,7 +168,7 @@ def download_youtube_video(video_url, output_path):
                 "path": output_path
             }
         else:
-            # youtube-dl might have added an extension
+            # yt-dlp might have added an extension
             base_path = os.path.splitext(output_path)[0]
             for ext in ['.mp4', '.webm', '.mkv']:
                 if os.path.exists(base_path + ext):
@@ -183,7 +191,7 @@ def download_youtube_video(video_url, output_path):
         }
 
 def download_instagram_reel(reel_url, output_path):
-    """Download an Instagram reel using instaloader."""
+    """Download an Instagram reel using yt-dlp."""
     try:
         # Create the directory if it doesn't exist
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -200,9 +208,9 @@ def download_instagram_reel(reel_url, output_path):
         
         shortcode = match.group(2)
         
-        # Use youtube-dl for Instagram as well (it works for reels and posts)
+        # Use yt-dlp for Instagram as well (it works for reels and posts)
         subprocess.run([
-            'youtube-dl',
+            'yt-dlp',
             '-o', output_path,
             '--no-warnings',
             reel_url
@@ -215,7 +223,7 @@ def download_instagram_reel(reel_url, output_path):
                 "path": output_path
             }
         else:
-            # youtube-dl might have added an extension
+            # yt-dlp might have added an extension
             base_path = os.path.splitext(output_path)[0]
             for ext in ['.mp4', '.jpg', '.png']:
                 if os.path.exists(base_path + ext):
