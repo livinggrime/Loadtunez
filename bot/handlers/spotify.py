@@ -141,8 +141,11 @@ def download_single_track(update, track_id):
         
         update.message.reply_text(f"🎵 Downloading track: *{track_name}* by *{artists}*", parse_mode='Markdown')
         
+        # Create a safe filename
+        safe_filename = "".join([c for c in f"{artists} - {track_name}" if c.isalpha() or c.isdigit() or c in ' -_.']).strip()
+        output_path = os.path.join(DOWNLOAD_DIRECTORY, f"{safe_filename}.mp3")
+        
         # Download the track
-        output_path = os.path.join(DOWNLOAD_DIRECTORY, f"{artists} - {track_name}.mp3")
         result = download_spotify_track(track_id, output_path)
         
         if not result.get("success", False):
@@ -165,25 +168,54 @@ def download_single_track(update, track_id):
         # Send the downloaded file
         update.message.reply_text(f"✅ Downloaded: *{track_name}* by *{artists}*\nFile size: {file_size/1024/1024:.2f} MB", parse_mode='Markdown')
         
+        # First try sending as audio
         try:
             with open(actual_path, 'rb') as audio_file:
-                update.message.reply_audio(
+                message = update.message.reply_audio(
                     audio=audio_file,
                     title=track_name,
                     performer=artists,
                     caption=f"Album: {album_name}"
                 )
+                update.message.reply_text("✅ File sent successfully! Check your downloads folder if it doesn't appear automatically.")
+                return
         except Exception as send_error:
             update.message.reply_text(f"❌ Error sending audio file: {str(send_error)}")
-            # Try sending as document if audio fails
+        
+        # If audio fails, try sending as document
+        try:
+            with open(actual_path, 'rb') as doc_file:
+                message = update.message.reply_document(
+                    document=doc_file,
+                    caption=f"{track_name} by {artists} (Album: {album_name})"
+                )
+                update.message.reply_text("✅ File sent as document! Tap on it to download.")
+                return
+        except Exception as doc_error:
+            update.message.reply_text(f"❌ Error sending document: {str(doc_error)}")
+            
+        # Last resort - try sending a smaller portion of the file
+        if file_size > 10*1024*1024:  # If file is larger than 10MB
             try:
-                with open(actual_path, 'rb') as doc_file:
+                update.message.reply_text("File is large, trying to send a smaller portion...")
+                with open(actual_path, 'rb') as large_file:
+                    # Read first 8MB
+                    smaller_data = large_file.read(8*1024*1024)
+                    
+                # Write to a new file
+                smaller_path = actual_path + ".smaller.mp3"
+                with open(smaller_path, 'wb') as smaller_file:
+                    smaller_file.write(smaller_data)
+                
+                # Send the smaller file
+                with open(smaller_path, 'rb') as small_file:
                     update.message.reply_document(
-                        document=doc_file,
-                        caption=f"{track_name} by {artists} (Album: {album_name})"
+                        document=small_file,
+                        caption=f"{track_name} by {artists} (Album: {album_name}) - PARTIAL FILE"
                     )
-            except Exception as doc_error:
-                update.message.reply_text(f"❌ Error sending document: {str(doc_error)}")
+                    update.message.reply_text("⚠️ Sent partial file due to size limitations.")
+            except Exception as small_error:
+                update.message.reply_text(f"❌ All sending methods failed: {str(small_error)}")
     except Exception as e:
         update.message.reply_text(f"❌ Error downloading track: {str(e)}")
 
