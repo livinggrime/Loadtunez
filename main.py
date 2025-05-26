@@ -249,10 +249,6 @@ def main() -> None:
         updater.start_polling()
     
     # Run the bot until you press Ctrl-C
-    updater.idle()mand, handle_url))
-
-    # Start the Bot
-    updater.start_polling()
     updater.idle()
 
 if __name__ == '__main__':
