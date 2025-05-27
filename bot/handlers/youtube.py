@@ -3,7 +3,6 @@ import os
 import glob
 from telegram import Update
 from telegram.ext import CallbackContext
-from bot.utils.downloader import download_youtube_video, ensure_directory_exists
 
 def extract_youtube_id(url):
     """Extract YouTube video ID from URL."""
