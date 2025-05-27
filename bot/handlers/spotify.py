@@ -124,8 +124,11 @@ def handle_spotify_callback(update: Update, context: CallbackContext) -> None:
         query.message.reply_text(f"❌ Error processing request: {str(e)}")
 
 def download_single_track(update, track_id):
-    """Download a single Spotify track using spotdl and send to user with metadata and cover."""
+    """Download a single Spotify track using savify and send to user with metadata and cover."""
     try:
+        from savify import Savify
+        from savify.types import Format, Quality, SpotifyType
+
         # Get track info
         track = sp.track(track_id)
         track_name = track['name']
@@ -142,11 +145,12 @@ def download_single_track(update, track_id):
         # Notify user
         status_message = update.reply_text(f"🎵 Downloading: *{track_name}* by *{artists}*", parse_mode='Markdown')
 
-        # Download with spotdl
+        # Download with savify
         DOWNLOAD_DIRECTORY = os.environ.get("DOWNLOAD_DIRECTORY", "/tmp")
-        cmd = f'spotdl --output "{DOWNLOAD_DIRECTORY}" "https://open.spotify.com/track/{track_id}"'
-        print("Running command:", cmd)
-        os.system(cmd)
+        url = f"https://open.spotify.com/track/{track_id}"
+        savify = Savify(Format.MP3, Quality.BEST, DOWNLOAD_DIRECTORY)
+        print("Downloading with Savify:", url)
+        savify.download(url, SpotifyType.TRACK)
 
         # Find the newest mp3 file
         mp3_files = glob.glob(os.path.join(DOWNLOAD_DIRECTORY, "*.mp3"))
