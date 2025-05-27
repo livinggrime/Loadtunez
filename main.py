@@ -1,5 +1,5 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from telegram.error import BadRequest, TimedOut, NetworkError
 from bot.handlers.spotify import handle_spotify_url, handle_spotify_callback, search_spotify
 from bot.handlers.tiktok import handle_tiktok_url
@@ -19,7 +19,7 @@ TIKTOK_PATTERN = r'(https?://(www\.)?(tiktok\.com|vm\.tiktok\.com)/[@a-zA-Z0-9_\
 YOUTUBE_PATTERN = r'(https?://(www\.)?(youtube\.com/watch\?v=|youtu\.be/)[a-zA-Z0-9_-]+)'
 INSTAGRAM_PATTERN = r'(https?://(www\.)?(instagram\.com/reel/[a-zA-Z0-9_-]+|instagram\.com/p/[a-zA-Z0-9_-]+))'
 
-def start(update: Update, context: CallbackContext) -> None:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a welcome message when the command /start is issued."""
     # Inline keyboard for platform info
     inline_keyboard = [
@@ -38,7 +38,7 @@ def start(update: Update, context: CallbackContext) -> None:
     ]
     reply_markup = ReplyKeyboardMarkup(bottom_keyboard, resize_keyboard=True)
     
-    update.message.reply_text(
+    await update.message.reply_text(
         'Welcome to the Downloader Bot! 🎵📱🎬\n\n'
         'I can download content from Spotify, TikTok, YouTube, and Instagram.\n\n'
         'Simply send me a link to download content, or use the buttons below to learn more:',
@@ -46,27 +46,27 @@ def start(update: Update, context: CallbackContext) -> None:
     )
     
     # Send a second message with the persistent bottom keyboard
-    update.message.reply_text(
+    await update.message.reply_text(
         'I\'ve added quick access buttons at the bottom of your chat. Use them anytime!',
         reply_markup=reply_markup
     )
 
-def button_callback(update: Update, context: CallbackContext) -> None:
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle button callbacks."""
     query = update.callback_query
     
     try:
-        query.answer()
+        await query.answer()
         
         data = query.data
         
         # Handle Spotify download callbacks
         if data.startswith('dl_track_') or data.startswith('dl_album_'):
-            handle_spotify_callback(update, context)
+            await handle_spotify_callback(update, context)
             return
         
         if data == 'info_spotify':
-            query.edit_message_text(
+            await query.edit_message_text(
                 "🎵 *Spotify Downloader*\n\n"
                 "Send me any Spotify link to download:\n"
                 "• Track: spotify.com/track/...\n"
@@ -78,7 +78,7 @@ def button_callback(update: Update, context: CallbackContext) -> None:
                 parse_mode='Markdown'
             )
         elif data == 'info_tiktok':
-            query.edit_message_text(
+            await query.edit_message_text(
                 "📱 *TikTok Downloader*\n\n"
                 "Send me any TikTok video link:\n"
                 "• tiktok.com/@user/video/...\n"
@@ -87,7 +87,7 @@ def button_callback(update: Update, context: CallbackContext) -> None:
                 parse_mode='Markdown'
             )
         elif data == 'info_youtube':
-            query.edit_message_text(
+            await query.edit_message_text(
                 "🎬 *YouTube Downloader*\n\n"
                 "Send me any YouTube link:\n"
                 "• youtube.com/watch?v=...\n"
@@ -96,7 +96,7 @@ def button_callback(update: Update, context: CallbackContext) -> None:
                 parse_mode='Markdown'
             )
         elif data == 'info_instagram':
-            query.edit_message_text(
+            await query.edit_message_text(
                 "📸 *Instagram Downloader*\n\n"
                 "Send me any Instagram link:\n"
                 "• instagram.com/reel/...\n"
@@ -109,9 +109,9 @@ def button_callback(update: Update, context: CallbackContext) -> None:
         # If the callback query is too old, we can't answer it
         # Just continue with the operation
 
-def help_command(update: Update, context: CallbackContext) -> None:
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
-    update.message.reply_text(
+    await update.message.reply_text(
         'How to use this bot:\n\n'
         '1. Send a link from Spotify, TikTok, YouTube, or Instagram\n'
         '2. Wait for the download to complete\n'
@@ -127,28 +127,28 @@ def help_command(update: Update, context: CallbackContext) -> None:
         '• /start - Start the bot'
     )
 
-def search_command(update: Update, context: CallbackContext) -> None:
+async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /search command."""
     if not context.args:
-        update.message.reply_text("Please provide a search query. Example: /search bohemian rhapsody")
+        await update.message.reply_text("Please provide a search query. Example: /search bohemian rhapsody")
         return
     
     query = ' '.join(context.args)
-    search_spotify(update, context, query)
+    await search_spotify(update, context, query)
 
-def handle_url(update: Update, context: CallbackContext) -> None:
+async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle URLs sent by the user."""
     text = update.message.text
     
     # Handle keyboard button commands
     if text == "🔍 Search Spotify":
-        update.message.reply_text("Please enter your search query after 'search'. For example: search bohemian rhapsody")
+        await update.message.reply_text("Please enter your search query after 'search'. For example: search bohemian rhapsody")
         return
     elif text == "❓ Help":
-        help_command(update, context)
+        await help_command(update, context)
         return
     elif text == "🎵 Spotify":
-        update.message.reply_text(
+        await update.message.reply_text(
             "🎵 *Spotify Downloader*\n\n"
             "Send me any Spotify link to download:\n"
             "• Track: spotify.com/track/...\n"
@@ -161,7 +161,7 @@ def handle_url(update: Update, context: CallbackContext) -> None:
         )
         return
     elif text == "📱 TikTok":
-        update.message.reply_text(
+        await update.message.reply_text(
             "📱 *TikTok Downloader*\n\n"
             "Send me any TikTok video link:\n"
             "• tiktok.com/@user/video/...\n"
@@ -171,7 +171,7 @@ def handle_url(update: Update, context: CallbackContext) -> None:
         )
         return
     elif text == "🎬 YouTube":
-        update.message.reply_text(
+        await update.message.reply_text(
             "🎬 *YouTube Downloader*\n\n"
             "Send me any YouTube link:\n"
             "• youtube.com/watch?v=...\n"
@@ -181,7 +181,7 @@ def handle_url(update: Update, context: CallbackContext) -> None:
         )
         return
     elif text == "📸 Instagram":
-        update.message.reply_text(
+        await update.message.reply_text(
             "📸 *Instagram Downloader*\n\n"
             "Send me any Instagram link:\n"
             "• instagram.com/reel/...\n"
@@ -194,65 +194,58 @@ def handle_url(update: Update, context: CallbackContext) -> None:
     # Check for Spotify search
     if text.lower().startswith('search '):
         query = text[7:]  # Remove 'search ' prefix
-        search_spotify(update, context, query)
+        await search_spotify(update, context, query)
         return
     
     # Check for Spotify links
     if re.search(SPOTIFY_PATTERN, text):
-        handle_spotify_url(update, context)
+        await handle_spotify_url(update, context)
     # Check for TikTok links
     elif re.search(TIKTOK_PATTERN, text):
-        handle_tiktok_url(update, context)
+        await handle_tiktok_url(update, context)
     # Check for YouTube links
     elif re.search(YOUTUBE_PATTERN, text):
-        handle_youtube_url(update, context)
+        await handle_youtube_url(update, context)
     # Check for Instagram links
     elif re.search(INSTAGRAM_PATTERN, text):
-        handle_instagram_url(update, context)
+        await handle_instagram_url(update, context)
     else:
-        update.message.reply_text(
+        await update.message.reply_text(
             "I don't recognize this link. Please send a valid link from Spotify, TikTok, YouTube, or Instagram, "
             "or use /search [query] to search for music on Spotify."
         )
 
-def error_handler(update, context):
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log errors caused by updates."""
     print(f"Update {update} caused error {context.error}")
     
     # If the error is related to a message, inform the user
     if update and update.effective_message:
-        update.effective_message.reply_text(
+        await update.effective_message.reply_text(
             "Sorry, an error occurred while processing your request. Please try again later."
         )
 
-def main() -> None:
+async def main() -> None:
     """Start the bot."""
-    # Create the Updater and pass it your bot's token
-    updater = Updater(API_TOKEN)
-
-    # Get the dispatcher to register handlers
-    dispatcher = updater.dispatcher
+    # Create the Application and pass it your bot's token
+    application = Application.builder().token(API_TOKEN).build()
 
     # Register command handlers
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("help", help_command))
-    dispatcher.add_handler(CommandHandler("search", search_command))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("search", search_command))
     
     # Register callback query handler for button callbacks
-    dispatcher.add_handler(CallbackQueryHandler(button_callback))
+    application.add_handler(CallbackQueryHandler(button_callback))
     
     # Register message handler for URLs
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_url))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
     
     # Register error handler
-    dispatcher.add_error_handler(error_handler)
+    application.add_error_handler(error_handler)
     
     # Create download directory if it doesn't exist
     os.makedirs(DOWNLOAD_DIRECTORY, exist_ok=True)
-    
-    # Start the Bot
-    # For local development:
-    # updater.start_polling()
     
     # For production deployment on Render:
     PORT = int(os.environ.get('PORT', 8080))
@@ -260,18 +253,28 @@ def main() -> None:
     
     # If webhook URL is provided, use webhooks, otherwise use polling
     if WEBHOOK_URL:
+        await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{API_TOKEN}")
+        await application.start()
+        await application.update_webhook_info(
+            url=f"{WEBHOOK_URL}/{API_TOKEN}",
+            allowed_updates=["message", "callback_query"]
+        )
+        
+        # Start the webhook server
+        from telegram.ext import Updater
+        updater = Updater(bot=application.bot)
         updater.start_webhook(
             listen="0.0.0.0",
             port=PORT,
-            url_path=API_TOKEN,
-            webhook_url=f"{WEBHOOK_URL}/{API_TOKEN}"
+            url_path=API_TOKEN
         )
     else:
         # Fallback to polling if no webhook URL is provided
-        updater.start_polling()
+        await application.run_polling()
     
     # Run the bot until you press Ctrl-C
-    updater.idle()
+    await application.idle()
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+    asyncio.run(main())

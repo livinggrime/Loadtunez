@@ -1,7 +1,7 @@
 import re
 import os
 from telegram import Update
-from telegram.ext import CallbackContext
+from telegram.ext import ContextTypes
 import requests
 from bot.utils.downloader import ensure_directory_exists
 from bot.config import DOWNLOAD_DIRECTORY
@@ -47,16 +47,16 @@ def get_tiktok_download_url(video_id):
     
     return None
 
-def handle_tiktok_url(update: Update, context: CallbackContext) -> None:
+async def handle_tiktok_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle TikTok URLs."""
     url = update.message.text
     video_id = extract_tiktok_id(url)
     
     if not video_id:
-        update.message.reply_text("Invalid TikTok URL. Please provide a valid TikTok video link.")
+        await update.message.reply_text("Invalid TikTok URL. Please provide a valid TikTok video link.")
         return
     
-    update.message.reply_text("📱 Processing TikTok video...")
+    await update.message.reply_text("📱 Processing TikTok video...")
     
     try:
         # Ensure download directory exists
@@ -68,7 +68,7 @@ def handle_tiktok_url(update: Update, context: CallbackContext) -> None:
         if not download_url:
             # Fallback method for demonstration purposes
             # In a real implementation, you would use a working TikTok downloader library or API
-            update.message.reply_text("Using alternative download method...")
+            await update.message.reply_text("Using alternative download method...")
             
             # For demonstration, we'll use a placeholder URL
             # In a real implementation, you would replace this with actual TikTok video download logic
@@ -84,7 +84,7 @@ def handle_tiktok_url(update: Update, context: CallbackContext) -> None:
         # For a real implementation, you would use a library like TikTokAPI or a service
         # that can download TikTok videos without watermarks
         
-        update.message.reply_text("✅ TikTok video downloaded successfully!")
+        await update.message.reply_text("✅ TikTok video downloaded successfully!")
         
         # In a real implementation, you would send the actual downloaded video
         # update.message.reply_video(
@@ -93,7 +93,7 @@ def handle_tiktok_url(update: Update, context: CallbackContext) -> None:
         # )
         
         # For demonstration purposes
-        update.message.reply_text(
+        await update.message.reply_text(
             "In a real implementation, the video would be sent here.\n\n"
             "To implement this fully, you would need to:\n"
             "1. Use a TikTok downloader library or API\n"
@@ -103,4 +103,4 @@ def handle_tiktok_url(update: Update, context: CallbackContext) -> None:
         )
         
     except Exception as e:
-        update.message.reply_text(f"❌ Error downloading TikTok video: {str(e)}")
+        await update.message.reply_text(f"❌ Error downloading TikTok video: {str(e)}")

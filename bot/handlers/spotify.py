@@ -4,7 +4,7 @@ import glob
 import subprocess
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackContext
+from telegram.ext import ContextTypes
 from telegram.error import BadRequest, TimedOut
 from spotipy.oauth2 import SpotifyClientCredentials
 import spotipy
@@ -35,7 +35,7 @@ def extract_spotify_id(url):
     
     return None, None
 
-def handle_spotify_url(update: Update, context: CallbackContext) -> None:
+async def handle_spotify_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle Spotify URLs."""
     url = update.message.text
     spotify_id, content_type = extract_spotify_id(url)
@@ -44,21 +44,21 @@ def handle_spotify_url(update: Update, context: CallbackContext) -> None:
         # Check if it's a search query
         if url.lower().startswith('/search ') or url.lower().startswith('search '):
             query = url.split(' ', 1)[1]
-            search_spotify(update, context, query)
+            await search_spotify(update, context, query)
             return
-        update.message.reply_text("Invalid Spotify URL. Please provide a valid Spotify track, album, or playlist link.")
+        await update.message.reply_text("Invalid Spotify URL. Please provide a valid Spotify track, album, or playlist link.")
         return
     
     if content_type == 'track':
-        download_single_track(update.message, spotify_id)
+        await download_single_track(update.message, spotify_id)
     elif content_type == 'album':
-        update.message.reply_text("Album downloads are not supported. Please send individual track links.")
+        await update.message.reply_text("Album downloads are not supported. Please send individual track links.")
     elif content_type == 'playlist':
-        update.message.reply_text("Playlist downloads are not supported. Please send individual track links.")
+        await update.message.reply_text("Playlist downloads are not supported. Please send individual track links.")
 
-def search_spotify(update: Update, context: CallbackContext, query: str) -> None:
+async def search_spotify(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str) -> None:
     """Search for tracks and albums on Spotify."""
-    update.message.reply_text(f"🔍 Searching Spotify for: *{query}*", parse_mode='Markdown')
+    await update.message.reply_text(f"🔍 Searching Spotify for: *{query}*", parse_mode='Markdown')
     
     try:
         # Search for tracks
@@ -66,14 +66,14 @@ def search_spotify(update: Update, context: CallbackContext, query: str) -> None
         tracks = track_results['tracks']['items']
         
         if not tracks:
-            update.message.reply_text(f"❌ No results found for: *{query}*", parse_mode='Markdown')
+            await update.message.reply_text(f"❌ No results found for: *{query}*", parse_mode='Markdown')
             return
         
         # Create keyboard for tracks
         keyboard = []
         
         if tracks:
-            update.message.reply_text("🎵 *Tracks:*", parse_mode='Markdown')
+            await update.message.reply_text("🎵 *Tracks:*", parse_mode='Markdown')
             for i, track in enumerate(tracks):
                 track_name = track['name']
                 artists = ', '.join([artist['name'] for artist in track['artists']])
@@ -86,19 +86,19 @@ def search_spotify(update: Update, context: CallbackContext, query: str) -> None
                 )])
             
             reply_markup = InlineKeyboardMarkup(keyboard)
-            update.message.reply_text("Select a track to download:", reply_markup=reply_markup)
+            await update.message.reply_text("Select a track to download:", reply_markup=reply_markup)
             
     except Exception as e:
-        update.message.reply_text(f"❌ Error searching Spotify: {str(e)}")
+        await update.message.reply_text(f"❌ Error searching Spotify: {str(e)}")
 
-def handle_spotify_callback(update: Update, context: CallbackContext) -> None:
+async def handle_spotify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle Spotify callback queries."""
     query = update.callback_query
     
     try:
         # Try to answer the callback query, but don't fail if it's too old
         try:
-            query.answer()
+            await query.answer()
         except (BadRequest, TimedOut):
             pass
         
@@ -107,10 +107,10 @@ def handle_spotify_callback(update: Update, context: CallbackContext) -> None:
         if data.startswith('dl_track_'):
             track_id = data.replace('dl_track_', '')
             try:
-                query.edit_message_text(f"Starting track download...")
+                await query.edit_message_text(f"Starting track download...")
             except (BadRequest, TimedOut):
                 # If we can't edit the message, send a new one
-                query.message.reply_text(f"Starting track download...")
+                await query.message.reply_text(f"Starting track download...")
             
             # Get track info
             track = sp.track(track_id)
@@ -118,13 +118,13 @@ def handle_spotify_callback(update: Update, context: CallbackContext) -> None:
             artists = ', '.join([artist['name'] for artist in track['artists']])
             
             # Send a direct message instead of trying to edit the callback message
-            query.message.reply_text(f"🎵 Downloading: *{track_name}* by *{artists}*", parse_mode='Markdown')
-            download_single_track(query.message, track_id)
+            await query.message.reply_text(f"🎵 Downloading: *{track_name}* by *{artists}*", parse_mode='Markdown')
+            await download_single_track(query.message, track_id)
     except Exception as e:
         # If any error occurs, send a new message
-        query.message.reply_text(f"❌ Error processing request: {str(e)}")
+        await query.message.reply_text(f"❌ Error processing request: {str(e)}")
 
-def download_single_track(update, track_id):
+async def download_single_track(update, track_id):
     """Download a single Spotify track using spotdl and send to user with metadata and cover."""
     try:
         # Get track info
@@ -141,7 +141,7 @@ def download_single_track(update, track_id):
         fallback_markup = InlineKeyboardMarkup(keyboard)
 
         # Notify user
-        status_message = update.reply_text(f"🎵 Downloading: *{track_name}* by *{artists}*", parse_mode='Markdown')
+        status_message = await update.reply_text(f"🎵 Downloading: *{track_name}* by *{artists}*", parse_mode='Markdown')
 
         # Download with spotdl
         DOWNLOAD_DIRECTORY = os.environ.get("DOWNLOAD_DIRECTORY", "/tmp")
@@ -156,7 +156,7 @@ def download_single_track(update, track_id):
         mp3_files = glob.glob(os.path.join(DOWNLOAD_DIRECTORY, "*.mp3"))
         if not mp3_files:
             print("No mp3 files found in", DOWNLOAD_DIRECTORY)
-            update.reply_text(
+            await update.reply_text(
                 f"❌ Error downloading track. You can try finding it on YouTube:",
                 reply_markup=fallback_markup
             )
@@ -167,7 +167,7 @@ def download_single_track(update, track_id):
         print("Downloaded file:", latest_file, "Size:", file_size)
 
         if file_size == 0:
-            update.reply_text(
+            await update.reply_text(
                 f"❌ Downloaded file is empty. You can try finding it on YouTube:",
                 reply_markup=fallback_markup
             )
@@ -175,7 +175,7 @@ def download_single_track(update, track_id):
             return
 
         if file_size > 50 * 1024 * 1024:
-            update.reply_text("❌ The downloaded file is too large for Telegram (max 50MB).")
+            await update.reply_text("❌ The downloaded file is too large for Telegram (max 50MB).")
             os.remove(latest_file)
             return
 
@@ -193,7 +193,7 @@ def download_single_track(update, track_id):
         # Send audio with metadata and cover
         try:
             with open(latest_file, 'rb') as audio_file:
-                update.reply_audio(
+                await update.reply_audio(
                     audio=audio_file,
                     title=track_name,
                     performer=artists,
@@ -202,15 +202,15 @@ def download_single_track(update, track_id):
                 )
         except Exception as send_error:
             print("Error sending audio:", send_error)
-            update.reply_text("❌ Error sending audio file.")
+            await update.reply_text("❌ Error sending audio file.")
 
         # Clean up
         os.remove(latest_file)
         if thumb_path and os.path.exists(thumb_path):
             os.remove(thumb_path)
 
-        status_message.edit_text(f"✅ Sent: *{track_name}* by *{artists}*", parse_mode='Markdown')
+        await status_message.edit_text(f"✅ Sent: *{track_name}* by *{artists}*", parse_mode='Markdown')
 
     except Exception as e:
         print("General error:", e)
-        update.reply_text(f"❌ Error processing track: {str(e)}")
+        await update.reply_text(f"❌ Error processing track: {str(e)}")

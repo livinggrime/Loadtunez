@@ -1,7 +1,7 @@
 import re
 import os
 from telegram import Update
-from telegram.ext import CallbackContext
+from telegram.ext import ContextTypes
 from bot.utils.downloader import ensure_directory_exists
 from bot.config import DOWNLOAD_DIRECTORY
 
@@ -19,16 +19,16 @@ def extract_instagram_id(url):
     
     return None, None
 
-def handle_instagram_url(update: Update, context: CallbackContext) -> None:
+async def handle_instagram_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle Instagram URLs."""
     url = update.message.text
     content_id, content_type = extract_instagram_id(url)
     
     if not content_id:
-        update.message.reply_text("Invalid Instagram URL. Please provide a valid Instagram reel or post link.")
+        await update.message.reply_text("Invalid Instagram URL. Please provide a valid Instagram reel or post link.")
         return
     
-    update.message.reply_text(f"📸 Processing Instagram {content_type}...")
+    await update.message.reply_text(f"📸 Processing Instagram {content_type}...")
     
     try:
         # Ensure download directory exists
@@ -39,14 +39,14 @@ def handle_instagram_url(update: Update, context: CallbackContext) -> None:
         
         # In a real implementation, this would use instaloader or a similar library
         # to download the reel or post
-        update.message.reply_text(f"Downloading Instagram {content_type}... This may take a while.")
+        await update.message.reply_text(f"Downloading Instagram {content_type}... This may take a while.")
         
         # Download the content
         # In a real implementation, you would use a library like instaloader
         # or a service that can download Instagram content
         
         # For demonstration purposes
-        update.message.reply_text(
+        await update.message.reply_text(
             "In a real implementation, the Instagram content would be downloaded and sent here.\n\n"
             "To implement this fully, you would need to:\n"
             "1. Use an Instagram downloader library like instaloader\n"
@@ -76,4 +76,4 @@ def handle_instagram_url(update: Update, context: CallbackContext) -> None:
         #     update.message.reply_text(f"❌ Failed to download the Instagram {content_type}.")
         
     except Exception as e:
-        update.message.reply_text(f"❌ Error downloading Instagram {content_type}: {str(e)}")
+        await update.message.reply_text(f"❌ Error downloading Instagram {content_type}: {str(e)}")

@@ -2,7 +2,7 @@ import re
 import os
 import glob
 from telegram import Update
-from telegram.ext import CallbackContext
+from telegram.ext import ContextTypes
 
 def extract_youtube_id(url):
     """Extract YouTube video ID from URL."""
@@ -18,7 +18,7 @@ def extract_youtube_id(url):
     
     return None
 
-def handle_youtube_url(update: Update, context: CallbackContext):
+async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text
     DOWNLOAD_DIRECTORY = os.environ.get("DOWNLOAD_DIRECTORY", "/tmp")
     # Use yt-dlp to download as mp3
@@ -28,10 +28,10 @@ def handle_youtube_url(update: Update, context: CallbackContext):
     # Find the newest mp3 file in the directory
     mp3_files = glob.glob(os.path.join(DOWNLOAD_DIRECTORY, "*.mp3"))
     if not mp3_files:
-        update.message.reply_text("Download failed. No audio file found.")
+        await update.message.reply_text("Download failed. No audio file found.")
         return
     latest_file = max(mp3_files, key=os.path.getctime)
     print(f"Downloaded: {latest_file}, Size: {os.path.getsize(latest_file)} bytes")  # Debug print
     with open(latest_file, "rb") as f:
-        update.message.reply_audio(f, filename=os.path.basename(latest_file))
+        await update.message.reply_audio(f, filename=os.path.basename(latest_file))
     os.remove(latest_file)
