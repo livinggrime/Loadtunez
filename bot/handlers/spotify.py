@@ -145,11 +145,13 @@ def download_single_track(update, track_id):
         # Download with spotdl
         DOWNLOAD_DIRECTORY = os.environ.get("DOWNLOAD_DIRECTORY", "/tmp")
         cmd = f'spotdl --output "{DOWNLOAD_DIRECTORY}" "https://open.spotify.com/track/{track_id}"'
+        print("Running command:", cmd)
         os.system(cmd)
 
         # Find the newest mp3 file
         mp3_files = glob.glob(os.path.join(DOWNLOAD_DIRECTORY, "*.mp3"))
         if not mp3_files:
+            print("No mp3 files found in", DOWNLOAD_DIRECTORY)
             update.reply_text(
                 f"❌ Error downloading track. You can try finding it on YouTube:",
                 reply_markup=fallback_markup
@@ -158,11 +160,18 @@ def download_single_track(update, track_id):
 
         latest_file = max(mp3_files, key=os.path.getctime)
         file_size = os.path.getsize(latest_file)
+        print("Downloaded file:", latest_file, "Size:", file_size)
+
         if file_size == 0:
             update.reply_text(
                 f"❌ Downloaded file is empty. You can try finding it on YouTube:",
                 reply_markup=fallback_markup
             )
+            os.remove(latest_file)
+            return
+
+        if file_size > 50 * 1024 * 1024:
+            update.reply_text("❌ The downloaded file is too large for Telegram (max 50MB).")
             os.remove(latest_file)
             return
 
@@ -173,18 +182,23 @@ def download_single_track(update, track_id):
                 thumb_path = os.path.join(DOWNLOAD_DIRECTORY, "cover.jpg")
                 with open(thumb_path, "wb") as img_file:
                     img_file.write(requests.get(cover_url).content)
-            except Exception:
+            except Exception as e:
+                print("Error downloading cover art:", e)
                 thumb_path = None
 
         # Send audio with metadata and cover
-        with open(latest_file, 'rb') as audio_file:
-            update.reply_audio(
-                audio=audio_file,
-                title=track_name,
-                performer=artists,
-                caption=f"Album: {album_name}",
-                thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None
-            )
+        try:
+            with open(latest_file, 'rb') as audio_file:
+                update.reply_audio(
+                    audio=audio_file,
+                    title=track_name,
+                    performer=artists,
+                    caption=f"Album: {album_name}",
+                    thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None
+                )
+        except Exception as send_error:
+            print("Error sending audio:", send_error)
+            update.reply_text("❌ Error sending audio file.")
 
         # Clean up
         os.remove(latest_file)
@@ -194,4 +208,5 @@ def download_single_track(update, track_id):
         status_message.edit_text(f"✅ Sent: *{track_name}* by *{artists}*", parse_mode='Markdown')
 
     except Exception as e:
+        print("General error:", e)
         update.reply_text(f"❌ Error processing track: {str(e)}")
