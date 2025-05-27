@@ -2,7 +2,7 @@ import re
 import os
 from telegram import Update
 from telegram.ext import CallbackContext
-from bot.utils.downloader import download_instagram_reel, ensure_directory_exists
+from bot.utils.downloader import ensure_directory_exists
 from bot.config import DOWNLOAD_DIRECTORY
 
 def extract_instagram_id(url):
