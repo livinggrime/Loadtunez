@@ -3,7 +3,7 @@ import os
 from telegram import Update
 from telegram.ext import CallbackContext
 import requests
-from bot.utils.downloader import download_file, ensure_directory_exists
+from bot.utils.downloader import ensure_directory_exists
 from bot.config import DOWNLOAD_DIRECTORY
 
 def extract_tiktok_id(url):
