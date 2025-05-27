@@ -16,8 +16,6 @@ sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
 ))
 
 def extract_spotify_id(url):
-    spotify_id, content_type = extract_spotify_id(url)
-    print("DEBUG:", spotify_id, content_type)
     """Extract Spotify ID and type from URL."""
     # Track pattern
     track_match = re.search(r'spotify\.com/track/([a-zA-Z0-9]+)', url)
