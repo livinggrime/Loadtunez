@@ -127,7 +127,7 @@ def download_single_track(update, track_id):
     """Download a single Spotify track using savify and send to user with metadata and cover."""
     try:
         from savify import Savify
-        from savify.types import Format, Quality, SpotifyType
+        from savify.types import Format, Quality
 
         # Get track info
         track = sp.track(track_id)
@@ -150,7 +150,7 @@ def download_single_track(update, track_id):
         url = f"https://open.spotify.com/track/{track_id}"
         savify = Savify(Format.MP3, Quality.BEST, DOWNLOAD_DIRECTORY)
         print("Downloading with Savify:", url)
-        savify.download(url, SpotifyType.TRACK)
+        savify.download(url)
 
         # Find the newest mp3 file
         mp3_files = glob.glob(os.path.join(DOWNLOAD_DIRECTORY, "*.mp3"))
