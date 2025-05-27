@@ -1,10 +1,11 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+from telegram.error import BadRequest, TimedOut, NetworkError
 from bot.handlers.spotify import handle_spotify_url, handle_spotify_callback, search_spotify
 from bot.handlers.tiktok import handle_tiktok_url
 from bot.handlers.youtube import handle_youtube_url
 from bot.handlers.instagram import handle_instagram_url
-from bot.config import API_TOKEN
+from bot.config import API_TOKEN, DOWNLOAD_DIRECTORY  # <-- Add DOWNLOAD_DIRECTORY to the import
 import os
 from dotenv import load_dotenv
 
@@ -53,52 +54,60 @@ def start(update: Update, context: CallbackContext) -> None:
 def button_callback(update: Update, context: CallbackContext) -> None:
     """Handle button callbacks."""
     query = update.callback_query
-    query.answer()
     
-    # Handle Spotify download callbacks
-    if query.data.startswith('dl_track_') or query.data.startswith('dl_album_'):
-        handle_spotify_callback(update, context)
-        return
-    
-    if query.data == 'info_spotify':
-        query.edit_message_text(
-            "🎵 *Spotify Downloader*\n\n"
-            "Send me any Spotify link to download:\n"
-            "• Track: spotify.com/track/...\n"
-            "• Album: spotify.com/album/...\n"
-            "• Playlist: spotify.com/playlist/...\n\n"
-            "Or search for music with:\n"
-            "• /search [song or album name]\n\n"
-            "I'll download it in high quality with all metadata!",
-            parse_mode='Markdown'
-        )
-    elif query.data == 'info_tiktok':
-        query.edit_message_text(
-            "📱 *TikTok Downloader*\n\n"
-            "Send me any TikTok video link:\n"
-            "• tiktok.com/@user/video/...\n"
-            "• vm.tiktok.com/...\n\n"
-            "I'll download it without watermark!",
-            parse_mode='Markdown'
-        )
-    elif query.data == 'info_youtube':
-        query.edit_message_text(
-            "🎬 *YouTube Downloader*\n\n"
-            "Send me any YouTube link:\n"
-            "• youtube.com/watch?v=...\n"
-            "• youtu.be/...\n\n"
-            "I'll download it in high quality!",
-            parse_mode='Markdown'
-        )
-    elif query.data == 'info_instagram':
-        query.edit_message_text(
-            "📸 *Instagram Downloader*\n\n"
-            "Send me any Instagram link:\n"
-            "• instagram.com/reel/...\n"
-            "• instagram.com/p/...\n\n"
-            "I'll download it in high quality!",
-            parse_mode='Markdown'
-        )
+    try:
+        query.answer()
+        
+        data = query.data
+        
+        # Handle Spotify download callbacks
+        if data.startswith('dl_track_') or data.startswith('dl_album_'):
+            handle_spotify_callback(update, context)
+            return
+        
+        if data == 'info_spotify':
+            query.edit_message_text(
+                "🎵 *Spotify Downloader*\n\n"
+                "Send me any Spotify link to download:\n"
+                "• Track: spotify.com/track/...\n"
+                "• Album: spotify.com/album/...\n"
+                "• Playlist: spotify.com/playlist/...\n\n"
+                "Or search for music with:\n"
+                "• /search [song or album name]\n\n"
+                "I'll download it in high quality with all metadata!",
+                parse_mode='Markdown'
+            )
+        elif data == 'info_tiktok':
+            query.edit_message_text(
+                "📱 *TikTok Downloader*\n\n"
+                "Send me any TikTok video link:\n"
+                "• tiktok.com/@user/video/...\n"
+                "• vm.tiktok.com/...\n\n"
+                "I'll download it without watermark!",
+                parse_mode='Markdown'
+            )
+        elif data == 'info_youtube':
+            query.edit_message_text(
+                "🎬 *YouTube Downloader*\n\n"
+                "Send me any YouTube link:\n"
+                "• youtube.com/watch?v=...\n"
+                "• youtu.be/...\n\n"
+                "I'll download it in high quality!",
+                parse_mode='Markdown'
+            )
+        elif data == 'info_instagram':
+            query.edit_message_text(
+                "📸 *Instagram Downloader*\n\n"
+                "Send me any Instagram link:\n"
+                "• instagram.com/reel/...\n"
+                "• instagram.com/p/...\n\n"
+                "I'll download it in high quality!",
+                parse_mode='Markdown'
+            )
+    except (BadRequest, TimedOut) as e:
+        print(f"Callback error: {e}")
+        # If the callback query is too old, we can't answer it
+        # Just continue with the operation
 
 def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
@@ -206,6 +215,16 @@ def handle_url(update: Update, context: CallbackContext) -> None:
             "or use /search [query] to search for music on Spotify."
         )
 
+def error_handler(update, context):
+    """Log errors caused by updates."""
+    print(f"Update {update} caused error {context.error}")
+    
+    # If the error is related to a message, inform the user
+    if update and update.effective_message:
+        update.effective_message.reply_text(
+            "Sorry, an error occurred while processing your request. Please try again later."
+        )
+
 def main() -> None:
     """Start the bot."""
     # Create the Updater and pass it your bot's token
@@ -225,8 +244,11 @@ def main() -> None:
     # Register message handler for URLs
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_url))
     
+    # Register error handler
+    dispatcher.add_error_handler(error_handler)
+    
     # Create download directory if it doesn't exist
-    os.makedirs(os.path.dirname(os.path.abspath(__file__)) + '/downloads/', exist_ok=True)
+    os.makedirs(DOWNLOAD_DIRECTORY, exist_ok=True)
     
     # Start the Bot
     # For local development:

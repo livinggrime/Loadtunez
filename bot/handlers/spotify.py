@@ -1,11 +1,13 @@
 import re
 import os
+import glob
+import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
+from telegram.error import BadRequest, TimedOut
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
-from bot.utils.downloader import download_spotify_track, ensure_directory_exists
-from bot.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, DOWNLOAD_DIRECTORY
+from bot.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
 # Initialize Spotify client
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
@@ -91,74 +93,105 @@ def search_spotify(update: Update, context: CallbackContext, query: str) -> None
 def handle_spotify_callback(update: Update, context: CallbackContext) -> None:
     """Handle Spotify callback queries."""
     query = update.callback_query
-    query.answer()
     
-    data = query.data
-    
-    if data.startswith('dl_track_'):
-        track_id = data.replace('dl_track_', '')
-        query.edit_message_text(f"Starting track download...")
-        download_single_track(query, track_id)
+    try:
+        # Try to answer the callback query, but don't fail if it's too old
+        try:
+            query.answer()
+        except (BadRequest, TimedOut):
+            pass
+        
+        data = query.data
+        
+        if data.startswith('dl_track_'):
+            track_id = data.replace('dl_track_', '')
+            try:
+                query.edit_message_text(f"Starting track download...")
+            except (BadRequest, TimedOut):
+                # If we can't edit the message, send a new one
+                query.message.reply_text(f"Starting track download...")
+            
+            # Get track info
+            track = sp.track(track_id)
+            track_name = track['name']
+            artists = ', '.join([artist['name'] for artist in track['artists']])
+            
+            # Send a direct message instead of trying to edit the callback message
+            query.message.reply_text(f"🎵 Downloading: *{track_name}* by *{artists}*", parse_mode='Markdown')
+            download_single_track(query.message, track_id)
+    except Exception as e:
+        # If any error occurs, send a new message
+        query.message.reply_text(f"❌ Error processing request: {str(e)}")
 
 def download_single_track(update, track_id):
-    """Download a single Spotify track directly to memory and send to user."""
+    """Download a single Spotify track using spotdl and send to user with metadata and cover."""
     try:
         # Get track info
         track = sp.track(track_id)
         track_name = track['name']
         artists = ', '.join([artist['name'] for artist in track['artists']])
         album_name = track['album']['name']
-        
-        update.message.reply_text(f"🎵 Downloading track: *{track_name}* by *{artists}*", parse_mode='Markdown')
-        
-        # Download the track to a temporary file
-        result = download_spotify_track(track_id)
-        
-        if not result.get("success", False):
-            update.message.reply_text(f"❌ Error downloading track: {result.get('error', 'Unknown error')}")
+        cover_url = track['album']['images'][0]['url'] if track['album']['images'] else None
+
+        # Generate a YouTube search link as fallback
+        search_query = f"{artists} - {track_name} audio"
+        youtube_search_url = f"https://www.youtube.com/results?search_query={search_query.replace(' ', '+')}"
+        keyboard = [[InlineKeyboardButton("Search on YouTube", url=youtube_search_url)]]
+        fallback_markup = InlineKeyboardMarkup(keyboard)
+
+        # Notify user
+        status_message = update.reply_text(f"🎵 Downloading: *{track_name}* by *{artists}*", parse_mode='Markdown')
+
+        # Download with spotdl
+        DOWNLOAD_DIRECTORY = os.environ.get("DOWNLOAD_DIRECTORY", "/tmp")
+        cmd = f'spotdl --output "{DOWNLOAD_DIRECTORY}" "https://open.spotify.com/track/{track_id}"'
+        os.system(cmd)
+
+        # Find the newest mp3 file
+        mp3_files = glob.glob(os.path.join(DOWNLOAD_DIRECTORY, "*.mp3"))
+        if not mp3_files:
+            update.reply_text(
+                f"❌ Error downloading track. You can try finding it on YouTube:",
+                reply_markup=fallback_markup
+            )
             return
-            
-        # Get the file path
-        temp_path = result.get("path")
-        
-        if not os.path.exists(temp_path):
-            update.message.reply_text(f"❌ Downloaded file not found")
-            return
-            
-        # Check file size
-        file_size = os.path.getsize(temp_path)
+
+        latest_file = max(mp3_files, key=os.path.getctime)
+        file_size = os.path.getsize(latest_file)
         if file_size == 0:
-            update.message.reply_text("❌ Downloaded file is empty")
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            update.reply_text(
+                f"❌ Downloaded file is empty. You can try finding it on YouTube:",
+                reply_markup=fallback_markup
+            )
+            os.remove(latest_file)
             return
-            
-        # Send the downloaded file
-        update.message.reply_text(f"✅ Downloaded: *{track_name}* by *{artists}*\nSending file...", parse_mode='Markdown')
-        
-        try:
-            with open(temp_path, 'rb') as audio_file:
-                update.message.reply_audio(
-                    audio=audio_file,
-                    title=track_name,
-                    performer=artists,
-                    caption=f"Album: {album_name}"
-                )
-        except Exception as send_error:
-            update.message.reply_text(f"❌ Error sending audio file: {str(send_error)}")
-            # Try sending as document if audio fails
+
+        # Download cover art if available
+        thumb_path = None
+        if cover_url:
             try:
-                with open(temp_path, 'rb') as doc_file:
-                    update.message.reply_document(
-                        document=doc_file,
-                        caption=f"{track_name} by {artists} (Album: {album_name})"
-                    )
-            except Exception as doc_error:
-                update.message.reply_text(f"❌ Error sending document: {str(doc_error)}")
-        
-        # Clean up the temporary file
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-            
+                thumb_path = os.path.join(DOWNLOAD_DIRECTORY, "cover.jpg")
+                with open(thumb_path, "wb") as img_file:
+                    img_file.write(requests.get(cover_url).content)
+            except Exception:
+                thumb_path = None
+
+        # Send audio with metadata and cover
+        with open(latest_file, 'rb') as audio_file:
+            update.reply_audio(
+                audio=audio_file,
+                title=track_name,
+                performer=artists,
+                caption=f"Album: {album_name}",
+                thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None
+            )
+
+        # Clean up
+        os.remove(latest_file)
+        if thumb_path and os.path.exists(thumb_path):
+            os.remove(thumb_path)
+
+        status_message.edit_text(f"✅ Sent: *{track_name}* by *{artists}*", parse_mode='Markdown')
+
     except Exception as e:
-        update.message.reply_text(f"❌ Error downloading track: {str(e)}")
+        update.reply_text(f"❌ Error processing track: {str(e)}")
