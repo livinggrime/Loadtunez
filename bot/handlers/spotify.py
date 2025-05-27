@@ -1,12 +1,13 @@
 import re
 import os
 import glob
+import subprocess
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 from telegram.error import BadRequest, TimedOut
-import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
+import spotipy
 from bot.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
 # Initialize Spotify client
@@ -49,7 +50,7 @@ def handle_spotify_url(update: Update, context: CallbackContext) -> None:
         return
     
     if content_type == 'track':
-        download_single_track(update, spotify_id)
+        download_single_track(update.message, spotify_id)
     elif content_type == 'album':
         update.message.reply_text("Album downloads are not supported. Please send individual track links.")
     elif content_type == 'playlist':
@@ -124,11 +125,8 @@ def handle_spotify_callback(update: Update, context: CallbackContext) -> None:
         query.message.reply_text(f"❌ Error processing request: {str(e)}")
 
 def download_single_track(update, track_id):
-    """Download a single Spotify track using savify and send to user with metadata and cover."""
+    """Download a single Spotify track using spotdl and send to user with metadata and cover."""
     try:
-        from savify import Savify
-        from savify.types import Format, Quality
-
         # Get track info
         track = sp.track(track_id)
         track_name = track['name']
@@ -145,12 +143,14 @@ def download_single_track(update, track_id):
         # Notify user
         status_message = update.reply_text(f"🎵 Downloading: *{track_name}* by *{artists}*", parse_mode='Markdown')
 
-        # Download with savify
+        # Download with spotdl
         DOWNLOAD_DIRECTORY = os.environ.get("DOWNLOAD_DIRECTORY", "/tmp")
         url = f"https://open.spotify.com/track/{track_id}"
-        savify = Savify(Format.MP3, Quality.BEST, DOWNLOAD_DIRECTORY)
-        print("Downloading with Savify:", url)
-        savify.download(url)
+        cmd = f'spotdl --output "{DOWNLOAD_DIRECTORY}" "{url}"'
+        print("Running command:", cmd)
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        print("spotdl stdout:", result.stdout)
+        print("spotdl stderr:", result.stderr)
 
         # Find the newest mp3 file
         mp3_files = glob.glob(os.path.join(DOWNLOAD_DIRECTORY, "*.mp3"))
