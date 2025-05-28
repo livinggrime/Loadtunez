@@ -3,3 +3,4 @@ spotipy
 spotdl
 requests
 python-dotenv
+ffmpeg-python

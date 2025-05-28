@@ -146,6 +146,17 @@ async def download_single_track(update, track_id):
         # Download with spotdl
         DOWNLOAD_DIRECTORY = os.environ.get("DOWNLOAD_DIRECTORY", "/tmp")
         url = f"https://open.spotify.com/track/{track_id}"
+        
+        # Check if ffmpeg is installed
+        try:
+            ffmpeg_check = subprocess.run(['ffmpeg', '-version'], shell=True, capture_output=True, text=True)
+            if ffmpeg_check.returncode != 0:
+                await update.reply_text("❌ FFmpeg is not installed. Please install FFmpeg to download tracks.")
+                return
+        except Exception:
+            await update.reply_text("❌ FFmpeg is not installed. Please install FFmpeg to download tracks.")
+            return
+            
         cmd = f'spotdl --output "{DOWNLOAD_DIRECTORY}" "{url}"'
         print("Running command:", cmd)
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
